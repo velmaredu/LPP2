@@ -2,24 +2,40 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.sql.SQLOutput;
+import java.util.ArrayList;
 import java.util.Scanner;
 
 public class Parser {
     // private static Scanner scanner;
-
+    static ArrayList<String> procedures = new ArrayList<>();
+    static ArrayList<String> timers = new ArrayList<>();
+    static boolean procedure = false;
     public static void main(String[] args) {
-
-        // // Para pedir por fichero
+        // Para pedir por fichero
         if (args.length < 1) {
             System.err.println("Debe especificar el nombre del fichero de entrada.");
             System.exit(1);
         }
     
         try (BufferedReader br = new BufferedReader(new FileReader(new File(args[0])))) {
+        //try (BufferedReader br = new BufferedReader(new FileReader(new File("E:\\Universidad\\2022-2023\\SegundoCuatri\\LP\\Laboratorio\\Practica2\\LPP2\\example03.txt")))){
             String line;
+            boolean puntoFinal = false;
             int lineNumber = 1;
             while ((line = br.readLine()) != null) {
-                parse(line, lineNumber++);
+                if(puntoFinal){
+                    throw new ParseException(lineNumber,"No se esperaba un '.'.");
+                }
+                if(!line.equals("") && !line.equals(".")){
+                    parse(line, lineNumber++);
+                }
+                if(line.equals(".")){
+                    puntoFinal = true;
+                }
+            }
+            if (puntoFinal){
+                System.out.println("El codigo es correcto");
             }
         } catch (IOException e) {
             System.err.println("Error al leer el fichero de entrada: " + e.getMessage());
@@ -29,8 +45,8 @@ public class Parser {
             System.exit(1);
         }
 
-        // scanner = new Scanner(System.in);
-        // System.out.print("Ingrese una expresión: ");
+        //scanner = new Scanner(System.in);
+        //System.out.print("Ingrese una expresión: ");
         // String input = scanner.nextLine();
         // try {
         //     parse(input, 0);
@@ -42,81 +58,127 @@ public class Parser {
 
     private static void parse(String input, int lineNumber) throws ParseException {
         String[] tokens = input.split(" ");
-        if (tokens.length < 2) {
+        if (tokens.length < 2 && !tokens[0].equals(";") && !tokens[0].equals(".") && !tokens[0].equals("")) {
             throw new ParseException(lineNumber,"La expresión es demasiado corta.");
         }
         String command = tokens[0];
-        String argument = tokens[1];
+        String argument = "";
+        if(tokens.length>=2){
+            argument = tokens[1];
+        }
         switch (command) {
             case "start":
-                if (!argument.equals("timer")) {
+                if (!argument.contains("timer")){
                     throw new ParseException(lineNumber,"Se esperaba el argumento 'timer'.");
                 }
-                if (tokens.length < 4 || !tokens[2].equals("seconds") || !tokens[3].equals("to") || tokens.length < 5) {
-                    throw new ParseException(lineNumber,"Sintaxis incorrecta para 'start timer'.");
-                }
                 try {
-                    Integer.parseInt(tokens[4]);
+                    Integer.parseInt(tokens[2]);
+                    timers.add(tokens[1]);
                 } catch (NumberFormatException e) {
                     throw new ParseException(lineNumber,"Se esperaba un valor numérico para el tiempo de espera.");
                 }
+                if(tokens[tokens.length-1].equals(";") || tokens[tokens.length-1].contains(";")){
+                    procedure=false;
+                }
                 break;
             case "stop":
-                if (!argument.equals("timer")) {
+                if (!argument.contains("timer")) {
                     throw new ParseException(lineNumber,"Se esperaba el argumento 'timer'.");
                 }
-                if (tokens.length > 2) {
+                if (tokens.length > 2 && !tokens[tokens.length-1].equals(";")) {
                     throw new ParseException(lineNumber,"Demasiados argumentos para 'stop timer'.");
+                }
+                if(tokens[tokens.length-1].equals(";") || tokens[tokens.length-1].contains(";")){
+                    procedure=false;
                 }
                 break;
             case "set":
+                //Revisar contador y mensaje de la excepción
                 if (tokens.length < 3) {
                     throw new ParseException(lineNumber,"Se esperaba el argumento 'on' o 'off'.");
                 }
-                String state = tokens[2];
-                if (!state.equals("on") && !state.equals("off")) {
+                if (!argument.equals("on") && !argument.equals("off")) {
                     throw new ParseException(lineNumber,"Se esperaba el argumento 'on' o 'off'.");
                 }
-                if (!argument.equals("switch")) {
-                    throw new ParseException(lineNumber,"Se esperaba el argumento 'switch'.");
+                if (!tokens[2].contains("light")) {
+                    throw new ParseException(lineNumber,"Se esperaba el argumento 'light'.");
+                }
+                if(tokens[tokens.length-1].equals(";") || tokens[tokens.length-1].contains(";")){
+                    procedure=false;
                 }
                 break;
-            case "waiting":
-                if (!argument.equals("for")) {
-                    throw new ParseException(lineNumber,"Se esperaba el argumento 'for'.");
+            case "wait":
+                if (!argument.equals("while") && !argument.equals("until")){
+                    throw new ParseException(lineNumber,"Se esperab un argumento 'while' o un argumento 'until'.");
+                }else{
+                   if (timers.contains(tokens[2])){
+                       if(tokens[tokens.length-1].equals(";")){
+                           procedure=false;
+                       }
+                       break;
+                   }else{
+                       if( tokens[2].equals("signal")){
+                           if (!tokens[3].equals(" ")){
+                               try {
+                                   Integer.parseInt(tokens[3]);
+                                   throw new ParseException(lineNumber,"Se esperab un argumento 'signal' o 'timer'.");
+                               }catch (NumberFormatException e){
+                                   if(tokens[tokens.length-1].equals(";")){
+                                       procedure=false;
+                                   }
+                                   break;
+                               }
+                           }
+                       }
+                       else{
+                           throw new ParseException(lineNumber,"Se esperab un argumento 'signal' o 'timer'.");
+                       }
+                   }
                 }
-                if (tokens.length < 4) {
-                    throw new ParseException(lineNumber,"Sintaxis incorrecta para 'waiting for'.");
-                }
-                String event = tokens[3];
-                switch (event) {
-                    case "timer":
-                        if (tokens.length < 5 || !tokens[4].equals("while") && !tokens[4].equals("until")) {
-                            throw new ParseException(lineNumber,"Sintaxis incorrecta para 'wait while/until timer'.");
-                        }
-                        break;
-                    case "signal":
-                        if (tokens.length < 5 || !tokens[4].equals("event") || tokens.length < 6) {
-                            throw new ParseException(lineNumber,"Sintaxis incorrecta para 'wait while/until signal event'.");
-                        }
-                        String signal = tokens[5];
-                        if (!signal.equals("switch")) {
-                            throw new ParseException(lineNumber,"Se esperaba el argumento 'switch'.");
-                        }
-                        break;
-                    default:
-                        throw new ParseException(lineNumber,"Se esperaba el argumento 'timer' o 'signal'.");
-                }
-                String condition = tokens[4];
-                if (!condition.equals("while") && !condition.equals("until")) {
-                    throw new ParseException(lineNumber,"Se esperaba la condición 'while' o 'until'.");
+                if(tokens[tokens.length-1].equals(";") || tokens[tokens.length-1].contains(";")){
+                    procedure=false;
                 }
                 break;
             case "run":
-                if (tokens.length < 2 || !tokens[1].equals("procedure")) {
+                if (procedure){
+                    throw new ParseException(lineNumber,"No se esperaba un argumento 'run'.");
+                }
+                //Mirar numero de tokesn
+                if (tokens.length < 2 || !procedures.contains(tokens[1])) {
                     throw new ParseException(lineNumber,"Se esperaba el argumento 'procedure'.");
                 }
+                if(tokens[tokens.length-1].equals(".") || tokens[tokens.length-1].contains(";")){
+                    System.out.println("El codigo es correcto");
+                }
                 break;
+            case "procedure":
+                if(argument == null){
+                    throw new ParseException(lineNumber,"Se esperaba un nombre.");
+                }else{
+                    if(procedures.contains(argument)){
+                        throw new ParseException(lineNumber,"No se pueden redefinir procedimientos.");
+                    }
+                    procedures.add(argument);
+                    procedure = true;
+                }
+                if(tokens[tokens.length-1].equals(";")){
+                    procedure=false;
+                }
+                break;
+            case ";":
+                procedure = false;
+                break;
+            case "":
+                if(tokens[1].equals("")){
+                    String nueva ="";
+                    for(int i = 2; i<tokens.length;i++){
+                        nueva = nueva+tokens[i]+" ";
+                    }
+                    parse(nueva,lineNumber);
+                    break;
+                }else{
+                    throw new ParseException(lineNumber,"Se esperaba otro formato.");
+                }
             default:
                 throw new ParseException(lineNumber,"Comando no reconocido: " + command);
         }
